@@ -23,9 +23,21 @@ clock = pygame.time.Clock()
 # Font
 font = pygame.font.SysFont("Arial", 20)
 
+# Load resources
+background = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\grassblock.png")
+block_textures = [pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\grassblock.png").convert_alpha()]
+block_textures = [pygame.transform.scale(tex, (10, 10)) for tex in block_textures]
+
+player_idle = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\idleanimation.gif").convert_alpha()
+player_walk = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\walkinganimation.gif").convert_alpha()
+player_rect = pygame.Rect(screen_width / 2 - 5, screen_height / 2 - 10, 10, 20)
+
+# Sounds
+place_sound = pygame.mixer.Sound("C:\\Users\\userm\\Downloads\\Scratch App_20231027\\Scratch App_20231027\\static\\blocks-media\\click.mp3")
+remove_sound = pygame.mixer.Sound("C:\\Users\\userm\\Downloads\\Scratch App_20231027\\Scratch App_20231027\\static\\blocks-media\\click.mp3")
+
 # Set up colors
 WHITE = (255, 255, 255)
-BLUE = (0, 0, 255)
 
 # Entities
 currentPlayer = classic_entity.Player()
@@ -40,12 +52,11 @@ World = {}
 WorldPosition = classic_component.Position2D()
 WorldDelta = classic_component.Velocity2D()
 
-# Block Types (In dev)
+# Block Types
 BlockType = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255), (0, 255, 255),
              (255, 255, 255)]
 
 # Set connection
-
 cliNet = network.ServerConnection("127.0.0.1")
 cliNet.send(network.Hello("test"))
 
@@ -66,7 +77,7 @@ network_lock = threading.Lock()
 running = True
 
 def NetworkThread():
-    global World, position2D, netThread, running
+    global World, position2D, running
 
     while True:
         time.sleep(0.016)  # Sleep for 16ms (for approx. 60FPS)
@@ -84,13 +95,13 @@ def NetworkThread():
                 cliNet.send(network.Heartbeat())
             elif receiving['t'] == network.CHUNK_UPDATE:
                 updated_chunk = receiving['data']['chunk']
-                # Update the world data with the new chunk
                 chunk_coord = (updated_chunk['chunk_x'], updated_chunk['chunk_y'])
                 World[chunk_coord] = {}
-                for i in range(0, updated_chunk['blocks'].__len__()):
-                    World[chunk_coord][(i % 16 * 10, i // 16 * 10)] = updated_chunk['blocks'][updated_chunk['blocks'].__len__() - 1 - i]
+                for i in range(0, len(updated_chunk['blocks'])):
+                    World[chunk_coord][(i % 16 * 10, i // 16 * 10)] = updated_chunk['blocks'][len(updated_chunk['blocks']) - 1 - i]
             else:
                 print(receiving)
+
 # Draw world
 def draw_world(chunkCoord):
     dChunkX = math.ceil(screen_width / 320)
@@ -105,19 +116,17 @@ def draw_world(chunkCoord):
                         loadChunk[0] * 160 - blockPos[0] + WorldPosition.x + 145 + screen_width / 2,
                         -loadChunk[1] * 160 + blockPos[1] - WorldPosition.y - 150 + screen_height / 2
                     )
-                    block_images = [pygame.image.load("C:/Users/userm/Downloads/grassblock.png")]
-                    screen.blit(block_images[blockType], (blockScreenPos[0], blockScreenPos[1]))
-
-
-
+                    screen.blit(block_textures[blockType], (blockScreenPos[0], blockScreenPos[1]))
             else:
-                if (loadChunkX < 0) or (loadChunkY < 0):
+                if loadChunkX < 0 or loadChunkY < 0:
                     continue
                 World[loadChunk] = {}
                 cliNet.send(network.ClientRequestChunk(loadChunk[0], loadChunk[1]))
+
 # Game loop
 def main():
     global running, screen_size, screen_width, screen_height
+    show_debug = False
     while running:
         dt = clock.tick(50) / 1000  # Calculate time per frame
         for event in pygame.event.get():
@@ -130,45 +139,48 @@ def main():
                 screen_width = screen_size[0]
                 screen_height = screen_size[1]
 
+        # Toggle debug information
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_TAB]:
+            show_debug = not show_debug
+
         # Update movement / controls
         movement_update = False
         WorldDelta.setVariable(vx=0, vy=0)
-        keys = pygame.key.get_pressed()
 
         chunkCoord = (int(position2D.x // 160), int(position2D.y // 160))
         chunkPos = (int(position2D.x % 160 // 10 * 10), int(position2D.y % 160 // 10 * 10))
 
-        if keys[currentPlayer.keys[0]]:  # Move up
+        if keys[currentPlayer.keys[0]]:
             position2D.y += speed * dt
             WorldDelta.vy += speed * dt
             movement_update = True
-        if keys[currentPlayer.keys[1]]:  # Move left
+        if keys[currentPlayer.keys[1]]:
             position2D.x -= speed * dt
             WorldDelta.vx -= speed * dt
             movement_update = True
-        if keys[currentPlayer.keys[2]]:  # Move down
+        if keys[currentPlayer.keys[2]]:
             position2D.y -= speed * dt
             WorldDelta.vy -= speed * dt
             movement_update = True
-        if keys[currentPlayer.keys[3]]:  # Move right
+        if keys[currentPlayer.keys[3]]:
             position2D.x += speed * dt
             WorldDelta.vx += speed * dt
             movement_update = True
-        if keys[currentPlayer.keys[4]]:  # Place block
+        if keys[currentPlayer.keys[4]]:
             if chunkCoord not in World:
                 World[chunkCoord] = {}
             World[chunkCoord][chunkPos] = 2
-        if keys[currentPlayer.keys[5]]:  # Remove block
+            place_sound.play()
+        if keys[currentPlayer.keys[5]]:
             if World.get(chunkCoord).get(chunkPos) is not None:
                 del World[chunkCoord][chunkPos]
                 if len(World[chunkCoord]) == 0:
                     del World[chunkCoord]
-        # Debug chunk
-        if keys[pygame.K_EQUALS]:
-            print(World.get(chunkCoord))
+                remove_sound.play()
 
         # Reset screen
-        screen.fill((130, 200, 229))
+        screen.blit(pygame.transform.scale(background, (screen_width, screen_height)), (0, 0))
 
         # Move world
         if movement_update:
@@ -178,17 +190,21 @@ def main():
         # Draw world (visible chunks)
         draw_world(chunkCoord)
 
-        # Draw player
-        pygame.draw.rect(screen, BLUE, (screen_width / 2 - 5, screen_height / 2 - 10, 10, 20))
+        # Draw player (simple animation)
+        if movement_update:
+            screen.blit(player_walk, (player_rect.x, player_rect.y))
+        else:
+            screen.blit(player_idle, (player_rect.x, player_rect.y))
 
         # Debug FPS and Position
-        screen.blit(font.render(f"{clock.get_fps():.2f} FPS", 1, (0, 0, 0)), (0, 0))
-        screen.blit(font.render(f"{position2D}", 1, (0, 0, 0)), (400, 0))
+        if show_debug:
+            screen.blit(font.render(f"{clock.get_fps():.2f} FPS", 1, (0, 0, 0)), (10, 10))
+            screen.blit(font.render(f"Position: {position2D}", 1, (0, 0, 0)), (10, 30))
+            screen.blit(font.render(f"Chunk: {chunkCoord}", 1, (0, 0, 0)), (10, 50))
 
         # Update the display
         pygame.display.flip()
 
-# Quit Pygame
 if __name__ == '__main__':
     netThread = threading.Thread(target=NetworkThread, daemon=True)
     netThread.start()
