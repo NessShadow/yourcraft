@@ -24,19 +24,59 @@ clock = pygame.time.Clock()
 font = pygame.font.SysFont("Arial", 20)
 
 # Load resources
-background = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\grassblock.png")
-block_textures = [pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\grassblock.png").convert_alpha()]
+background = pygame.image.load("14e9a331115edf4e61686b563dda859f.jpg")
+block_textures = [
+    pygame.transform.scale(pygame.image.load("skyblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("grassblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("stoneblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("woodblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("woodblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("waterblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("woodblock.png").convert_alpha(), (10, 10)),
+    pygame.transform.scale(pygame.image.load("woodblock.png").convert_alpha(), (10, 10))
+]
+
 block_textures = [pygame.transform.scale(tex, (10, 10)) for tex in block_textures]
 
-player_idle = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\idleanimation.gif").convert_alpha()
-player_walk = pygame.image.load("C:\\Users\\userm\\OneDrive\\Documents\\GitHub\\yourcraft\\py\\Texture\\walkinganimation.gif").convert_alpha()
+# Player animation setup
+sprite_sheet = pygame.image.load("player_spritesheet.png").convert_alpha()
+sprite_width, sprite_height = 20, 20
+num_frames = 4  # Number of frames in the sprite sheet
+
+# Extract individual frames from the sprite sheet
+idle_frames = [sprite_sheet.subsurface((i * sprite_width, 0, sprite_width, sprite_height)) for i in range(num_frames)]
+walk_frames = [sprite_sheet.subsurface((i * sprite_width, sprite_height, sprite_width, sprite_height)) for i in range(num_frames)]
+
 player_rect = pygame.Rect(screen_width / 2 - 5, screen_height / 2 - 10, 10, 20)
 
 # Sounds
-place_sound = pygame.mixer.Sound("C:\\Users\\userm\\Downloads\\Scratch App_20231027\\Scratch App_20231027\\static\\blocks-media\\click.mp3")
-remove_sound = pygame.mixer.Sound("C:\\Users\\userm\\Downloads\\Scratch App_20231027\\Scratch App_20231027\\static\\blocks-media\\click.mp3")
+place_sound = pygame.mixer.Sound("click.mp3")
+remove_sound = pygame.mixer.Sound("click.mp3")
 
-# Set up colors
+# Animation control
+frame_index = 0
+frame_timer = 0
+animation_speed = 0.1  # Time per frame (seconds)
+
+def draw_player(is_moving, dt):
+    """
+    Draw the player sprite with animation based on movement state.
+    """
+    global frame_index, frame_timer
+
+    # Select animation frames based on movement
+    frames = walk_frames if is_moving else idle_frames
+
+    # Update the animation frame based on elapsed time
+    frame_timer += dt
+    if frame_timer >= animation_speed:
+        frame_index = (frame_index + 1) % num_frames  # Loop through frames
+        frame_timer = 0
+
+    # Draw the current frame
+    screen.blit(frames[frame_index], (player_rect.x, player_rect.y))
+
+# Colors
 WHITE = (255, 255, 255)
 
 # Entities
@@ -102,7 +142,6 @@ def NetworkThread():
             else:
                 print(receiving)
 
-# Draw world
 def draw_world(chunkCoord):
     dChunkX = math.ceil(screen_width / 320)
     dChunkY = math.ceil(screen_height / 320)
@@ -116,9 +155,12 @@ def draw_world(chunkCoord):
                         loadChunk[0] * 160 - blockPos[0] + WorldPosition.x + 145 + screen_width / 2,
                         -loadChunk[1] * 160 + blockPos[1] - WorldPosition.y - 150 + screen_height / 2
                     )
-                    screen.blit(block_textures[blockType], (blockScreenPos[0], blockScreenPos[1]))
+                    if 0 <= blockType < len(block_textures):
+                        screen.blit(block_textures[blockType], blockScreenPos)
+                    else:
+                        print(f"Invalid blockType: {blockType} at position {blockPos}")
             else:
-                if loadChunkX < 0 or loadChunkY < 0:
+                if (loadChunkX < 0) or (loadChunkY < 0):
                     continue
                 World[loadChunk] = {}
                 cliNet.send(network.ClientRequestChunk(loadChunk[0], loadChunk[1]))
@@ -190,11 +232,8 @@ def main():
         # Draw world (visible chunks)
         draw_world(chunkCoord)
 
-        # Draw player (simple animation)
-        if movement_update:
-            screen.blit(player_walk, (player_rect.x, player_rect.y))
-        else:
-            screen.blit(player_idle, (player_rect.x, player_rect.y))
+        # Draw player with animation
+        draw_player(movement_update, dt)
 
         # Debug FPS and Position
         if show_debug:
